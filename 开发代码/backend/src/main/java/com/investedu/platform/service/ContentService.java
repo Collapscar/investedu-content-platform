@@ -2,16 +2,20 @@ package com.investedu.platform.service;
 
 import com.investedu.platform.dto.AssetDto;
 import com.investedu.platform.dto.AssetUpsertRequest;
+import com.investedu.platform.dto.CategoryDto;
+import com.investedu.platform.dto.CategoryUpsertRequest;
 import com.investedu.platform.dto.DownloadResponse;
 import com.investedu.platform.dto.SearchResponse;
 import com.investedu.platform.dto.TopicDto;
 import com.investedu.platform.dto.TopicUpsertRequest;
 import com.investedu.platform.entity.AssetEntity;
+import com.investedu.platform.entity.CategoryEntity;
 import com.investedu.platform.entity.DownloadRecordEntity;
 import com.investedu.platform.entity.TopicAssetEntity;
 import com.investedu.platform.entity.TopicEntity;
 import com.investedu.platform.exception.NotFoundException;
 import com.investedu.platform.repository.AssetRepository;
+import com.investedu.platform.repository.CategoryRepository;
 import com.investedu.platform.repository.DownloadRecordRepository;
 import com.investedu.platform.repository.TopicRepository;
 import com.investedu.platform.storage.LocalStorageService;
@@ -47,19 +51,29 @@ public class ContentService {
 
   private final AssetRepository assetRepository;
   private final TopicRepository topicRepository;
+  private final CategoryRepository categoryRepository;
   private final DownloadRecordRepository downloadRecordRepository;
   private final LocalStorageService storageService;
 
   public ContentService(
       AssetRepository assetRepository,
       TopicRepository topicRepository,
+      CategoryRepository categoryRepository,
       DownloadRecordRepository downloadRecordRepository,
       LocalStorageService storageService
   ) {
     this.assetRepository = assetRepository;
     this.topicRepository = topicRepository;
+    this.categoryRepository = categoryRepository;
     this.downloadRecordRepository = downloadRecordRepository;
     this.storageService = storageService;
+  }
+
+  @Transactional(readOnly = true)
+  public List<CategoryDto> listCategories() {
+    return categoryRepository.findAllByOrderByDisplayOrderAscNameAsc().stream()
+        .map(this::toDto)
+        .toList();
   }
 
   @Transactional(readOnly = true)
@@ -127,6 +141,36 @@ public class ContentService {
     topicRepository.save(topic);
     saveDownload("topic", id);
     return new DownloadResponse(id, "topic", TOPIC_PACKAGE_URL.formatted(id), topic.getDownloads());
+  }
+
+  @Transactional
+  public CategoryDto createCategory(CategoryUpsertRequest request) {
+    CategoryEntity category = categoryRepository.findByName(request.name()).orElseGet(CategoryEntity::new);
+    apply(category, request);
+    if (category.getDisplayOrder() == 0) {
+      category.setDisplayOrder((int) categoryRepository.count() + 1);
+    }
+    return toDto(categoryRepository.save(category));
+  }
+
+  @Transactional
+  public CategoryDto updateCategory(String name, CategoryUpsertRequest request) {
+    CategoryEntity category = findCategory(name);
+    String oldName = category.getName();
+    boolean nameTaken = !Objects.equals(oldName, request.name()) && categoryRepository.existsByName(request.name());
+    if (nameTaken) {
+      throw new IllegalArgumentException("品类已存在: " + request.name());
+    }
+    apply(category, request);
+    CategoryEntity saved = categoryRepository.save(category);
+    renameCategoryReferences(oldName, saved.getName());
+    return toDto(saved);
+  }
+
+  @Transactional
+  public void deleteCategory(String name) {
+    CategoryEntity category = findCategory(name);
+    categoryRepository.delete(category);
   }
 
   @Transactional
@@ -281,6 +325,14 @@ public class ContentService {
     );
   }
 
+  public CategoryDto toDto(CategoryEntity category) {
+    return new CategoryDto(category.getName(), nvl(category.getCoverageContent()));
+  }
+
+  private CategoryEntity findCategory(String name) {
+    return categoryRepository.findByName(name).orElseThrow(() -> new NotFoundException("品类不存在: " + name));
+  }
+
   private AssetEntity findAsset(String id) {
     return assetRepository.findById(id).orElseThrow(() -> new NotFoundException("素材不存在: " + id));
   }
@@ -325,6 +377,29 @@ public class ContentService {
       topic.setDownloads(request.downloads());
     }
     topic.replaceAssetIds(request.assetIds() == null ? List.of() : request.assetIds());
+  }
+
+  private void apply(CategoryEntity category, CategoryUpsertRequest request) {
+    category.setName(request.name());
+    category.setCoverageContent(nvl(request.coverageContent()));
+  }
+
+  private void renameCategoryReferences(String oldName, String newName) {
+    if (Objects.equals(oldName, newName)) {
+      return;
+    }
+    assetRepository.findAll().stream()
+        .filter(asset -> Objects.equals(asset.getCat(), oldName))
+        .forEach(asset -> {
+          asset.setCat(newName);
+          assetRepository.save(asset);
+        });
+    topicRepository.findAll().stream()
+        .filter(topic -> Objects.equals(topic.getChannel(), oldName))
+        .forEach(topic -> {
+          topic.setChannel(newName);
+          topicRepository.save(topic);
+        });
   }
 
   private String nextAssetId(String cat) {

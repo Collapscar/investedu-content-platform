@@ -7,4 +7,5 @@ export const managerRoutes = [
 export const adminRoutes = [
   { key: "admin-assets", label: "素材管理" },
   { key: "admin-topics", label: "专题包管理" },
+  { key: "admin-categories", label: "品类管理" },
 ] as const;

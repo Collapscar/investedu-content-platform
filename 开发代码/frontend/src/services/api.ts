@@ -1,4 +1,16 @@
-import type { Asset, AssetPayload, DownloadResponse, Topic, TopicPayload } from "../types/content";
+import type {
+  Asset,
+  AssetDescriptionRequest,
+  AssetDescriptionSuggestion,
+  AssetPayload,
+  Category,
+  CategoryPayload,
+  DownloadResponse,
+  Topic,
+  TopicDescriptionRequest,
+  TopicDescriptionSuggestion,
+  TopicPayload,
+} from "../types/content";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
@@ -35,6 +47,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export const contentApi = {
+  listCategories: () => request<Category[]>("/categories"),
   listAssets: () => request<Asset[]>("/assets"),
   getAsset: (id: string) => request<Asset>(`/assets/${encodeURIComponent(id)}`),
   listTopics: () => request<Topic[]>("/topics"),
@@ -66,13 +79,40 @@ export const contentApi = {
   deleteTopic: (id: string) =>
     request<void>(`/admin/topics/${encodeURIComponent(id)}`, { method: "DELETE", admin: true }),
 
-  uploadCover: (file: File) => {
+  createCategory: (payload: CategoryPayload) =>
+    request<Category>("/admin/categories", { method: "POST", body: JSON.stringify(payload), admin: true }),
+  updateCategory: (name: string, payload: CategoryPayload) =>
+    request<Category>(`/admin/categories/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+      admin: true,
+    }),
+  deleteCategory: (name: string) =>
+    request<void>(`/admin/categories/${encodeURIComponent(name)}`, { method: "DELETE", admin: true }),
+
+  generateAssetDescription: (payload: AssetDescriptionRequest, signal?: AbortSignal) =>
+    request<AssetDescriptionSuggestion>("/admin/ai/assets/description", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      admin: true,
+      signal,
+    }),
+  generateTopicDescription: (payload: TopicDescriptionRequest, signal?: AbortSignal) =>
+    request<TopicDescriptionSuggestion>("/admin/ai/topics/description", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      admin: true,
+      signal,
+    }),
+
+  uploadCover: (file: File, signal?: AbortSignal) => {
     const form = new FormData();
     form.set("file", file);
     return request<{ publicUrl: string }>("/admin/files/covers", {
       method: "POST",
       body: form,
       admin: true,
+      signal,
     });
   },
 };

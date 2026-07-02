@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { contentApi, downloadZipFile } from "../services/api";
-import type { Asset, Topic } from "../types/content";
+import type { Asset, Category, Topic } from "../types/content";
 
 export function usePlatformStore() {
+  const [categories, setCategories] = useState<Category[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
@@ -12,10 +13,12 @@ export function usePlatformStore() {
     setLoading(true);
     setError(null);
     try {
-      const [nextAssets, nextTopics] = await Promise.all([
+      const [nextCategories, nextAssets, nextTopics] = await Promise.all([
+        contentApi.listCategories(),
         contentApi.listAssets(),
         contentApi.listTopics(),
       ]);
+      setCategories(nextCategories);
       setAssets(nextAssets);
       setTopics(nextTopics);
     } catch (err) {
@@ -79,6 +82,37 @@ export function usePlatformStore() {
     void contentApi.deleteTopic(id);
   };
 
+  const addCategory = (category: Category) => {
+    void contentApi.createCategory(category).then((saved) => {
+      setCategories((prev) => [...prev.filter((item) => item.name !== saved.name), saved]);
+    });
+  };
+
+  const updateCategory = (name: string, patch: Partial<Category>) => {
+    const current = categories.find((category) => category.name === name);
+    if (!current) return;
+
+    const optimistic = { ...current, ...patch };
+    setCategories((prev) => prev.map((item) => (item.name === name ? optimistic : item)));
+    if (optimistic.name !== name) {
+      setAssets((prev) => prev.map((asset) => (asset.cat === name ? { ...asset, cat: optimistic.name } : asset)));
+      setTopics((prev) => prev.map((topic) => (topic.channel === name ? { ...topic, channel: optimistic.name } : topic)));
+    }
+
+    void contentApi.updateCategory(name, optimistic).then((saved) => {
+      setCategories((prev) => prev.map((item) => (item.name === optimistic.name ? saved : item)));
+      if (saved.name !== optimistic.name) {
+        setAssets((prev) => prev.map((asset) => (asset.cat === optimistic.name ? { ...asset, cat: saved.name } : asset)));
+        setTopics((prev) => prev.map((topic) => (topic.channel === optimistic.name ? { ...topic, channel: saved.name } : topic)));
+      }
+    });
+  };
+
+  const deleteCategory = (name: string) => {
+    setCategories((prev) => prev.filter((item) => item.name !== name));
+    void contentApi.deleteCategory(name);
+  };
+
   const downloadAsset = (asset: Asset) => {
     void (async () => {
       try {
@@ -108,6 +142,7 @@ export function usePlatformStore() {
   };
 
   return {
+    categories,
     assets,
     topics,
     loading,
@@ -119,6 +154,9 @@ export function usePlatformStore() {
     addTopic,
     updateTopic,
     deleteTopic,
+    addCategory,
+    updateCategory,
+    deleteCategory,
     downloadAsset,
     downloadTopic,
   };

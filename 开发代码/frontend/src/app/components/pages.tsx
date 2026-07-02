@@ -3,9 +3,10 @@ import { TopBar } from "./sidebar-nav";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import {
   type Asset, type Topic, type Scene,
-  CHANNELS_ALL, SCENES, CATEGORY_THEMES,
+  SCENES,
   forwardTextOf, introOf, DISCLAIMER,
   assetPackageFiles, topicPackageFiles, topicCover, findAsset,
+  assetCategoryOptionsOf, categoryOptionsOf, categoryThemeOf,
   type PlatformStore,
 } from "./data";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -32,12 +33,13 @@ export function ContentAssetsPage({
   onOpenTopic: (id: string) => void;
   searchNode?: React.ReactNode;
 }) {
-  const { assets, topics, downloadAsset } = store;
+  const { assets, topics, categories, downloadAsset } = store;
   const recent = [...assets].sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 4);
   const recommended = topics.slice(0, 3);
 
   // 仅展示已配置内容的品类
-  const purchasedChannels = CHANNELS_ALL.filter((c) => assets.some((a) => a.cat === c));
+  const purchasedChannels = assetCategoryOptionsOf(categories, assets.map((asset) => asset.cat))
+    .filter((c) => assets.some((a) => a.cat === c));
 
   return (
     <>
@@ -77,7 +79,7 @@ export function ContentAssetsPage({
                       <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 text-right leading-tight">更新 {last}</span>
                     </div>
                     <div className="text-[12.5px] text-muted-foreground leading-relaxed line-clamp-2">
-                      覆盖：{CATEGORY_THEMES[c] ?? "—"}
+                      覆盖：{categoryThemeOf(categories, c)}
                     </div>
                     <div className="flex items-center gap-x-4 gap-y-2 flex-wrap text-[12.5px] text-foreground/85">
                       <span className="flex items-center gap-1.5"><FileText className="size-3.5 text-muted-foreground" />素材 <span className="tabular-nums" style={{ fontWeight: 600 }}>{catAssets.length}</span> 篇</span>
@@ -113,7 +115,7 @@ export function ContentAssetsPage({
         {/* 常用专题包 */}
         <section>
           <SectionHeader title="常用专题包" hint="按使用场景整理的内容组合" onMore={onGoTopics} moreLabel="查看全部专题包" />
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-4">
+          <div className="grid grid-cols-1 min-[1180px]:grid-cols-2 min-[1600px]:grid-cols-3 gap-4">
             {recommended.map((t) => (
               <RecommendedTopicCard key={t.id} t={t} assets={assets} onPreview={() => onOpenTopic(t.id)} onDownload={() => store.downloadTopic(t)} />
             ))}
@@ -136,6 +138,30 @@ function SectionHeader({ title, hint, onMore, moreLabel }: { title: string; hint
           {moreLabel ?? "查看全部"} →
         </button>
       )}
+    </div>
+  );
+}
+
+export function EmptyState({
+  title, desc, action, children, compact = false,
+}: {
+  title: string;
+  desc?: string;
+  action?: React.ReactNode;
+  children?: React.ReactNode;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`rounded-lg border border-dashed border-border bg-card/60 text-center ${compact ? "px-4 py-6" : "p-8"} space-y-3`}>
+      <div className="mx-auto size-9 rounded-full bg-muted text-muted-foreground grid place-items-center">
+        <Search className="size-4" />
+      </div>
+      <div className="space-y-1">
+        <div className="text-[13px] text-foreground" style={{ fontWeight: 600 }}>{title}</div>
+        {desc && <div className="text-[12px] text-muted-foreground leading-relaxed">{desc}</div>}
+      </div>
+      {children}
+      {action && <div className="flex justify-center">{action}</div>}
     </div>
   );
 }
@@ -167,19 +193,19 @@ function DeliveryRow({ a, onPreview, onDownload }: { a: Asset; onPreview: () => 
 function RecommendedTopicCard({ t, assets, onPreview, onDownload }: { t: Topic; assets: Asset[]; onPreview: () => void; onDownload: () => void }) {
   const cover = topicCover(assets, t);
   return (
-    <Card className="overflow-hidden cursor-pointer hover:border-[#94BFFF] hover:shadow-[0_8px_24px_rgba(29,33,41,0.06)] transition" onClick={onPreview}>
-      <CardContent className="p-4 flex gap-4">
-        <div className="w-[140px] aspect-[16/9] rounded bg-muted overflow-hidden shrink-0">
+    <Card className="h-full overflow-hidden cursor-pointer border hover:border-[#94BFFF] hover:shadow-[0_8px_24px_rgba(29,33,41,0.06)] transition" onClick={onPreview}>
+      <CardContent className="p-4 flex flex-col min-[900px]:flex-row gap-4 min-h-[188px] h-full">
+        <div className="w-full min-[900px]:w-[210px] h-[140px] min-[900px]:h-[150px] rounded-lg bg-muted overflow-hidden shrink-0">
           {cover && <ImageWithFallback src={cover} alt={t.name} className="size-full object-cover object-top" />}
         </div>
-        <div className="flex-1 min-w-0 space-y-2">
-          <div className="text-[14px]" style={{ fontWeight: 600 }}>{t.name}</div>
-          <div className="text-[12px] text-muted-foreground line-clamp-2">解决：{t.tagline}</div>
-          <div className="flex items-center gap-2 flex-wrap text-[11.5px]">
+        <div className="flex-1 min-w-0 flex flex-col gap-2">
+          <div className="text-[14.5px] leading-snug line-clamp-2 min-h-[38px]" style={{ fontWeight: 600 }}>{t.name}</div>
+          <div className="text-[12.5px] leading-relaxed text-muted-foreground line-clamp-2 min-h-[38px]">解决：{t.tagline}</div>
+          <div className="flex items-center gap-2 flex-wrap text-[11.5px] min-h-[24px]">
             <SceneBadge scene={t.scene} />
             <span className="text-muted-foreground">· 包含 {t.assetIds.length} 篇</span>
           </div>
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2 pt-1 mt-auto flex-wrap">
             <Button size="sm" variant="outline" className="h-8 text-[12.5px] border-primary text-primary hover:bg-[var(--primary-light)]" onClick={(e) => { e.stopPropagation(); onPreview(); }}>
               <Eye className="size-3.5 mr-1" />预览专题
             </Button>
@@ -193,6 +219,18 @@ function RecommendedTopicCard({ t, assets, onPreview, onDownload }: { t: Topic; 
   );
 }
 
+function assetRandomRank(id: string, seed: number) {
+  let h = seed >>> 0;
+  for (let i = 0; i < id.length; i += 1) {
+    h = Math.imul(h ^ id.charCodeAt(i), 16777619) >>> 0;
+  }
+  h ^= h >>> 16;
+  h = Math.imul(h, 2246822507) >>> 0;
+  h ^= h >>> 13;
+  h = Math.imul(h, 3266489909) >>> 0;
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
 /* ==================== 2. 素材库 ==================== */
 export function AssetsPage({
   store, initialCat, initialSelected, searchNode,
@@ -202,32 +240,42 @@ export function AssetsPage({
   initialSelected?: string | null;
   searchNode?: React.ReactNode;
 }) {
-  const { assets, downloadAsset } = store;
+  const { assets, categories, downloadAsset } = store;
   const [query, setQuery] = useState("");
   const [cat, setCat] = useState<string | null>(initialCat ?? null);
   const [scene, setScene] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(initialSelected ?? assets[0]?.id ?? null);
+  const [selected, setSelected] = useState<string | null>(initialSelected ?? null);
   const [picked, setPicked] = useState<string[]>([]);
   const [lightbox, setLightbox] = useState<Asset | null>(null);
+  const [assetShuffleSeed] = useState(() => Math.floor(Math.random() * 0x7fffffff));
 
-  const filtered = assets.filter((a) =>
-    (!query || a.title.includes(query) || a.question.includes(query) || a.summary.includes(query)) &&
-    (!cat || a.cat === cat) &&
-    (!scene || a.scene === scene)
-  );
-  const detail = assets.find((a) => a.id === selected) ?? assets[0];
+  const filtered = useMemo(() => assets
+    .filter((a) =>
+      (!query || a.title.includes(query) || a.question.includes(query) || a.summary.includes(query)) &&
+      (!cat || a.cat === cat) &&
+      (!scene || a.scene === scene)
+    )
+    .sort((a, b) => assetRandomRank(a.id, assetShuffleSeed) - assetRandomRank(b.id, assetShuffleSeed) || a.id.localeCompare(b.id)),
+    [assets, assetShuffleSeed, cat, query, scene]);
+  const selectedAsset = assets.find((a) => a.id === selected);
+  const detail = selectedAsset ?? filtered[0] ?? assets[0];
+  const activeSelectedId = selectedAsset?.id ?? detail?.id ?? null;
+  const categoryOptions = assetCategoryOptionsOf(categories, assets.map((asset) => asset.cat))
+    .filter((c) => assets.some((a) => a.cat === c));
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const clearFilters = () => { setQuery(""); setCat(null); setScene(null); };
   const filterActive = !!(query || cat || scene);
 
   // 无结果时的相邻推荐
-  const fallback = filtered.length === 0 ? assets.filter((a) => (cat && a.cat !== cat) || (query && (a.cat === cat))).slice(0, 3) : [];
+  const fallback = filtered.length === 0 ? assets.slice(0, 3) : [];
 
   if (!detail) {
     return (
       <>
         <TopBar title="素材库" searchNode={searchNode} />
-        <div className="p-10 text-center text-[13px] text-muted-foreground">暂无素材</div>
+        <div className="p-4 sm:p-6">
+          <EmptyState title="暂无素材" desc="当前机构还没有可用素材。" />
+        </div>
       </>
     );
   }
@@ -238,7 +286,7 @@ export function AssetsPage({
       <div className="flex-1 grid grid-cols-1 min-[1180px]:grid-cols-[minmax(0,1fr)_360px] gap-4 p-4 sm:p-6 overflow-y-auto min-[1180px]:overflow-hidden">
         <div className="min-[1180px]:overflow-y-auto min-[1180px]:pr-1 space-y-4 min-w-0">
           <div className="space-y-2">
-            <FilterPicker label="品类" value={cat} options={CHANNELS_ALL} onChange={setCat} />
+            <FilterPicker label="品类" value={cat} options={categoryOptions} onChange={setCat} />
             <FilterPicker label="使用场景" value={scene} options={SCENES} onChange={setScene} />
             <div className="flex items-center gap-2 pt-1">
               <span className="text-[12px] text-muted-foreground">
@@ -267,10 +315,10 @@ export function AssetsPage({
           )}
 
           {filtered.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 items-start gap-4">
               {filtered.map((a) => {
                 const isPicked = picked.includes(a.id);
-                const isSelected = selected === a.id;
+                const isSelected = activeSelectedId === a.id;
                 return (
                   <Card key={a.id} onClick={() => setSelected(a.id)}
                     className={`overflow-hidden cursor-pointer transition border ${isSelected ? "border-primary shadow-[0_0_0_3px_var(--primary-light)]" : "hover:border-[#94BFFF]"}`}>
@@ -288,30 +336,32 @@ export function AssetsPage({
                         {/* 底部渐变提示「可滚动查看完整长图」 */}
                         <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/35 to-transparent pointer-events-none" />
                       </div>
-                      <CardContent className="min-w-0 p-4 space-y-2">
+                      <CardContent className="min-w-0 flex flex-col p-4">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                             <span className="inline-flex items-center h-[20px] px-1.5 rounded text-[10.5px] bg-[var(--input-background)] text-foreground/70 border border-border" style={{ fontWeight: 500 }}>{a.cat}</span>
                             <span className="tabular-nums">{a.id}</span>
                           </div>
                         </div>
-                        <div className="text-[14px] line-clamp-2 leading-snug" style={{ fontWeight: 600 }}>{a.title}</div>
-                        <div className="text-[12px] text-foreground/75 line-clamp-3 leading-relaxed">
-                          <span className="text-muted-foreground">客户问题：</span>{a.question}
+                        <div className="mt-2 text-[14px] line-clamp-2 leading-snug" style={{ fontWeight: 600 }}>{a.title}</div>
+                        <div className="mt-3 rounded-md bg-muted/35 px-2.5 py-2 space-y-1.5">
+                          <div className="text-[12px] text-foreground/75 line-clamp-2 leading-relaxed">
+                            <span className="text-muted-foreground">客户问题：</span>{a.question}
+                          </div>
+                          <div className="text-[11.5px] text-muted-foreground line-clamp-2 leading-relaxed">
+                            <span className="text-foreground/60">核心摘要：</span>{a.summary}
+                          </div>
+                          <div className="text-[11.5px] text-muted-foreground line-clamp-1 leading-relaxed">
+                            <span className="text-foreground/60">适用对象：</span>{a.audience}
+                          </div>
                         </div>
-                        <div className="text-[11.5px] text-muted-foreground line-clamp-3 leading-relaxed">
-                          <span className="text-foreground/60">核心摘要：</span>{a.summary}
-                        </div>
-                        <div className="text-[11.5px] text-muted-foreground line-clamp-2">
-                          <span className="text-foreground/60">适用对象：</span>{a.audience}
-                        </div>
-                        <div className="flex items-center justify-between gap-2 pt-0.5 flex-wrap">
+                        <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
                           <SceneBadge scene={a.scene} />
                           <span className="text-[11px] text-muted-foreground tabular-nums flex items-center gap-1">
                             <Clock className="size-3" />更新于 {a.updated}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                        <div className="mt-3 flex items-center gap-1.5 flex-wrap">
                           <Button size="sm" className="flex-1 h-8 text-[12.5px] bg-primary" onClick={(e) => { e.stopPropagation(); downloadAsset(a); }}>
                             <Download className="size-3.5 mr-1" />下载素材包
                           </Button>
@@ -326,19 +376,22 @@ export function AssetsPage({
               })}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
-              <div className="text-[13px] text-foreground">无符合条件的素材</div>
-              <div className="text-[12px] text-muted-foreground">可尝试调整筛选条件，或参考以下相近内容</div>
-              <div className="flex justify-center gap-2 flex-wrap">
-                {fallback.map((a) => (
-                  <button key={a.id} onClick={() => { clearFilters(); setSelected(a.id); }}
-                    className="text-[12px] px-2.5 py-1 rounded border border-border hover:bg-muted">
-                    {a.cat} · {a.title}
-                  </button>
-                ))}
-              </div>
-              <Button size="sm" variant="outline" onClick={clearFilters}>清空全部筛选</Button>
-            </div>
+            <EmptyState
+              title="无符合条件的素材"
+              desc="可尝试调整关键词、品类或使用场景，或先清空筛选查看全部素材。"
+              action={<Button size="sm" variant="outline" onClick={clearFilters}>清空全部筛选</Button>}
+            >
+              {fallback.length > 0 && (
+                <div className="flex justify-center gap-2 flex-wrap">
+                  {fallback.map((a) => (
+                    <button key={a.id} onClick={() => { clearFilters(); setSelected(a.id); }}
+                      className="text-[12px] px-2.5 py-1 rounded border border-border hover:bg-muted max-w-full">
+                      {a.cat} · {a.title}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </EmptyState>
           )}
         </div>
 
@@ -446,10 +499,11 @@ export function TopicsPage({
 }
 
 function TopicList({ store, onOpen, searchNode }: { store: PlatformStore; onOpen: (id: string) => void; searchNode?: React.ReactNode }) {
-  const { assets, topics, downloadTopic } = store;
+  const { assets, topics, categories, downloadTopic } = store;
   const [cat, setCat] = useState<string | null>(null);
   const [scene, setScene] = useState<string | null>(null);
   const [sort, setSort] = useState<"recent" | "name">("recent");
+  const filterActive = !!(cat || scene);
 
   const rows = topics
     .filter((t) =>
@@ -473,7 +527,12 @@ function TopicList({ store, onOpen, searchNode }: { store: PlatformStore; onOpen
     <>
       <TopBar title="专题包" searchNode={searchNode} />
       <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
-        <FilterPicker label="品类" value={cat} options={CHANNELS_ALL.filter((c) => topics.some((t) => t.channel === c))} onChange={setCat} />
+        <FilterPicker
+          label="品类"
+          value={cat}
+          options={categoryOptionsOf(categories, topics.map((topic) => topic.channel)).filter((c) => topics.some((t) => t.channel === c))}
+          onChange={setCat}
+        />
         <FilterPicker label="使用场景" value={scene} options={SCENES} onChange={setScene} />
         <div className="flex items-center gap-2 pt-1">
           <span className="text-[12px] text-muted-foreground">共 {rows.length} 个专题包</span>
@@ -486,9 +545,11 @@ function TopicList({ store, onOpen, searchNode }: { store: PlatformStore; onOpen
         </div>
 
         {groups.length === 0 && (
-          <div className="rounded-lg border border-dashed border-border p-8 text-center text-[13px] text-muted-foreground">
-            无符合条件的专题包
-          </div>
+          <EmptyState
+            title="无符合条件的专题包"
+            desc="可尝试调整品类或使用场景，或先清空筛选查看全部专题包。"
+            action={filterActive ? <Button size="sm" variant="outline" onClick={() => { setCat(null); setScene(null); }}>清空全部筛选</Button> : undefined}
+          />
         )}
 
         {groups.map((entry, idx) => {
@@ -500,7 +561,7 @@ function TopicList({ store, onOpen, searchNode }: { store: PlatformStore; onOpen
                 <span className="text-[13px]" style={{ fontWeight: 600 }}>{groupName}</span>
                 <span className="text-[11px] text-muted-foreground">· {ts.length} 个专题包</span>
               </div>
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-3">
+              <div className="grid grid-cols-1 min-[1180px]:grid-cols-2 min-[1600px]:grid-cols-3 gap-3">
                 {ts.map((t) => (
                   <TopicCard key={`tc-${t.id}`} t={t} assets={assets} onOpen={() => onOpen(t.id)} onDownload={() => downloadTopic(t)} />
                 ))}
@@ -516,21 +577,21 @@ function TopicList({ store, onOpen, searchNode }: { store: PlatformStore; onOpen
 function TopicCard({ t, assets, onOpen, onDownload }: { t: Topic; assets: Asset[]; onOpen: () => void; onDownload: () => void }) {
   const cover = topicCover(assets, t);
   return (
-    <Card className="overflow-hidden cursor-pointer border hover:border-[#94BFFF] hover:shadow-[0_8px_24px_rgba(29,33,41,0.06)] transition" onClick={onOpen}>
-      <CardContent className="p-4 flex flex-col min-[900px]:flex-row gap-4">
-        <div className="w-full min-[900px]:w-[180px] aspect-[16/9] rounded bg-muted overflow-hidden shrink-0">
+    <Card className="h-full overflow-hidden cursor-pointer border hover:border-[#94BFFF] hover:shadow-[0_8px_24px_rgba(29,33,41,0.06)] transition" onClick={onOpen}>
+      <CardContent className="p-4 flex flex-col min-[900px]:flex-row gap-4 min-h-[202px] min-[1600px]:h-[245px] h-full">
+        <div className="w-full min-[900px]:w-[220px] h-[150px] min-[900px]:h-[164px] rounded-lg bg-muted overflow-hidden shrink-0">
           {cover && <ImageWithFallback src={cover} alt={t.name} className="size-full object-cover object-top" />}
         </div>
         <div className="flex-1 min-w-0 flex flex-col gap-2">
-          <div className="text-[14.5px]" style={{ fontWeight: 600 }}>{t.name}</div>
-          <div className="text-[12.5px] text-muted-foreground line-clamp-2">解决：{t.tagline}</div>
-          <div className="flex items-center gap-2 flex-wrap text-[11.5px]">
+          <div className="text-[14.5px] leading-snug line-clamp-2 min-h-[38px]" style={{ fontWeight: 600 }}>{t.name}</div>
+          <div className="text-[12.5px] leading-relaxed text-muted-foreground line-clamp-2 min-h-[38px]">解决：{t.tagline}</div>
+          <div className="flex items-center gap-2 flex-wrap text-[11.5px] min-h-[24px]">
             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-[var(--input-background)] text-foreground/70">{t.channel}</span>
             <SceneBadge scene={t.scene} />
             <span className="text-muted-foreground">· 包含 {t.assetIds.length} 篇</span>
           </div>
-          <div className="text-[12px] text-muted-foreground line-clamp-1">适合客户：{t.audience}</div>
-          <div className="text-[12px] text-muted-foreground line-clamp-1">推荐使用方式：{t.sendMode}</div>
+          <div className="text-[12px] leading-relaxed text-muted-foreground line-clamp-1 min-h-[18px]">适合客户：{t.audience}</div>
+          <div className="text-[12px] leading-relaxed text-muted-foreground line-clamp-1 min-h-[18px]">推荐使用方式：{t.sendMode}</div>
           <div className="flex items-center gap-2 pt-1 mt-auto flex-wrap">
             <Button size="sm" variant="outline" className="h-8 text-[12.5px] border-primary text-primary hover:bg-[var(--primary-light)]" onClick={(e) => { e.stopPropagation(); onOpen(); }}>
               <Eye className="size-3.5 mr-1" />预览专题
@@ -549,6 +610,7 @@ function TopicDetail({ store, id, onBack }: { store: PlatformStore; id: string; 
   const { assets, topics, downloadTopic } = store;
   const topic = topics.find((t) => t.id === id);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [lightbox, setLightbox] = useState<Asset | null>(null);
   if (!topic) return null;
   const topicAssets = topic.assetIds.map((aid) => findAsset(assets, aid)).filter(Boolean) as Asset[];
   const forwardText = `${topic.name}\n${topic.tagline}\n${topicAssets.map((a) => `· ${a.title}`).join("\n")}`;
@@ -606,7 +668,12 @@ function TopicDetail({ store, id, onBack }: { store: PlatformStore; id: string; 
                       <span className="text-foreground/70">核心摘要：</span>{a.summary}
                     </div>
                   </div>
-                  <Button size="sm" variant="outline" className="h-8 text-[12.5px] border-primary text-primary hover:bg-[var(--primary-light)] shrink-0 hidden min-[900px]:inline-flex">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-[12.5px] border-primary text-primary hover:bg-[var(--primary-light)] shrink-0"
+                    onClick={() => setLightbox(a)}
+                  >
                     <Eye className="size-3.5 mr-1" />预览素材
                   </Button>
                 </div>
@@ -710,6 +777,7 @@ function TopicDetail({ store, id, onBack }: { store: PlatformStore; id: string; 
           </Card>
         </div>
       </div>
+      {lightbox && <Lightbox asset={lightbox} onClose={() => setLightbox(null)} />}
     </>
   );
 }

@@ -20,7 +20,8 @@ class InvestEduApplicationTests {
 
   @Test
   void seedsFigmaPrototypeContent() {
-    assertThat(assetRepository.count()).isEqualTo(25);
-    assertThat(topicRepository.count()).isEqualTo(10);
+    assertThat(assetRepository.count()).isEqualTo(350);
+    assertThat(topicRepository.count()).isEqualTo(31);
+    assertThat(topicRepository.findById("T031")).isPresent();
   }
 }

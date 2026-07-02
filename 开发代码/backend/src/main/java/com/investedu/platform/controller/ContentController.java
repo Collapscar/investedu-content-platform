@@ -1,6 +1,7 @@
 package com.investedu.platform.controller;
 
 import com.investedu.platform.dto.AssetDto;
+import com.investedu.platform.dto.CategoryDto;
 import com.investedu.platform.dto.DownloadResponse;
 import com.investedu.platform.dto.SearchResponse;
 import com.investedu.platform.dto.TopicDto;
@@ -25,6 +26,11 @@ public class ContentController {
 
   public ContentController(ContentService contentService) {
     this.contentService = contentService;
+  }
+
+  @GetMapping("/categories")
+  public List<CategoryDto> listCategories() {
+    return contentService.listCategories();
   }
 
   @GetMapping("/assets")

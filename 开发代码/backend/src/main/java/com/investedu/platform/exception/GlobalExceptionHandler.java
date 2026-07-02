@@ -26,6 +26,11 @@ public class GlobalExceptionHandler {
     return build(HttpStatus.BAD_REQUEST, message, request);
   }
 
+  @ExceptionHandler(IllegalArgumentException.class)
+  public ResponseEntity<ApiError> handleBadRequest(IllegalArgumentException ex, HttpServletRequest request) {
+    return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+  }
+
   @ExceptionHandler(AccessDeniedException.class)
   public ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
     return build(HttpStatus.FORBIDDEN, "无权访问该接口", request);

@@ -1,4 +1,4 @@
-import type { Asset, Topic } from "../../types/content";
+import type { Asset, Category, Topic } from "../../types/content";
 import {
   CHANNELS_ALL,
   SCENES,
@@ -13,6 +13,7 @@ export {
   catDefaults,
   usePlatformStore,
   type Asset,
+  type Category,
   type Topic,
   type Scene,
   type PlatformStore,
@@ -36,10 +37,33 @@ export const assetPackageFiles = (a: Asset) => [
 export const CATEGORY_THEMES: Record<string, string> = {
   基金: "基金类型 · 风险认知 · 交易规则",
   理财: "风险测评 · 风险等级 · 购买自检",
+  黄金: "实物黄金 · 积存金 · 价格波动",
   保险: "保障缺口 · 家庭顺序 · 产品差异",
   信贷: "借贷决策 · 还款能力 · 用途边界",
   养老: "支出估算 · 医疗弹性 · 代际平衡",
+  代发: "工资账户 · 薪资规划 · 权益保护",
+  跨品类: "波动复盘 · 权益保护 · 资金规则",
 };
+
+export const CROSS_CATEGORY = "跨品类";
+
+export const fallbackCategories: Category[] = CHANNELS_ALL.map((name) => ({
+  name,
+  coverageContent: CATEGORY_THEMES[name] ?? "—",
+}));
+
+export const categoryOptionsOf = (categories: Category[] = [], extraNames: string[] = []) => {
+  const base = categories.length > 0 ? categories.map((category) => category.name) : fallbackCategories.map((category) => category.name);
+  return [...base, ...extraNames].filter((name, index, arr) => name && arr.indexOf(name) === index);
+};
+
+export const assetCategoryOptionsOf = (categories: Category[] = [], extraNames: string[] = []) =>
+  categoryOptionsOf(categories, extraNames).filter((name) => name !== CROSS_CATEGORY);
+
+export const categoryThemeOf = (categories: Category[] = [], name: string) =>
+  categories.find((category) => category.name === name)?.coverageContent
+  ?? CATEGORY_THEMES[name]
+  ?? "—";
 
 export const findAsset = (assets: Asset[], id: string) => assets.find((a) => a.id === id);
 

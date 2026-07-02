@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import { LayoutGrid, FolderOpen, Package, Search, User, Images, Boxes, Users, ShieldCheck, Check, ChevronDown } from "lucide-react";
+import { LayoutGrid, FolderOpen, Package, Search, User, Images, Boxes, Users, ShieldCheck, Check, ChevronDown, Tags } from "lucide-react";
 import { Input } from "./ui/input";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
@@ -22,7 +22,7 @@ function useRole() {
 }
 export type PageKey =
   | "portal" | "assets" | "topics"            // 客户经理端
-  | "admin-assets" | "admin-topics";          // 管理员后台
+  | "admin-assets" | "admin-topics" | "admin-categories"; // 管理员后台
 
 /** 平台 Logo：蓝底圆角方块，承载一枚由「向上箭头 + 视线圆点」组成的标记，象征「认知 → 增长」的投教价值 */
 function BrandLogo({ size = 28 }: { size?: number }) {
@@ -49,6 +49,7 @@ const NAV_MANAGER: NavItem[] = [
 const NAV_ADMIN: NavItem[] = [
   { key: "admin-assets", label: "素材管理", icon: Images },
   { key: "admin-topics", label: "专题包管理", icon: Boxes },
+  { key: "admin-categories", label: "品类管理", icon: Tags },
 ];
 
 export function SidebarNav({
@@ -61,7 +62,7 @@ export function SidebarNav({
   const isAdmin = role === "admin";
   const nav = isAdmin ? NAV_ADMIN : NAV_MANAGER;
   const home: PageKey = isAdmin ? "admin-assets" : "portal";
-  const tagline = isAdmin ? "维护素材与专题包" : "查找、预览、下载内容";
+  const tagline = isAdmin ? "维护素材、专题包、品类" : "查找、预览、下载内容";
 
   return (
     <aside className="w-[208px] shrink-0 bg-card border-r border-border flex flex-col">
@@ -151,7 +152,7 @@ const IDENTITY: Record<Role, { title: string; sub: string }> = {
 // 工作台入口文案（下拉项）
 const WORKBENCH: Record<Role, { title: string; desc: string; Icon: React.ComponentType<{ className?: string }> }> = {
   manager: { title: "客户经理端", desc: "查找、预览、下载内容", Icon: Users },
-  admin: { title: "管理后台", desc: "上传素材、维护专题包", Icon: ShieldCheck },
+  admin: { title: "管理后台", desc: "维护素材、专题包、品类", Icon: ShieldCheck },
 };
 
 const ROLE_ORDER: Role[] = ["manager", "admin"];

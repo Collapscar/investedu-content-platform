@@ -9,6 +9,7 @@ import {
 } from "./components/pages";
 import {
   AssetManagePage,
+  CategoryManagePage,
   TopicManagePage,
 } from "./components/admin-pages";
 import { usePlatformStore } from "./components/data";
@@ -88,6 +89,7 @@ export default function App() {
         {/* 管理员后台 */}
         {page === "admin-assets" && <AssetManagePage store={store} />}
         {page === "admin-topics" && <TopicManagePage store={store} />}
+        {page === "admin-categories" && <CategoryManagePage store={store} />}
       </main>
     </div>
     </RoleProvider>

@@ -27,6 +27,9 @@ const audience = {
   保险: "关注家庭保障与缺口梳理的客户",
   信贷: "有借贷需求、关注还款能力的客户",
   养老: "关注养老规划与现金流安排的客户",
+  黄金: "关注黄金投资形式、交易成本与价格波动的客户",
+  代发: "使用工资账户、关注薪资管理与权益保护的客户",
+  热点运营: "关注政策热点、市场规则和风险核验的客户",
 };
 const useWhen = {
   基金: "客户首次咨询基金品类、或对基金风险有疑问时",
@@ -34,6 +37,9 @@ const useWhen = {
   保险: "家庭保障盘点、年度保单复核或新增成员场景",
   信贷: "贷款受理前的需求与还款能力沟通环节",
   养老: "客户开始关注养老规划、临近退休或家庭代际财务沟通时",
+  黄金: "客户咨询黄金产品、准备交易或复盘黄金配置时",
+  代发: "客户办理或使用工资账户、核对收入及安排月度现金流时",
+  热点运营: "热点政策发布、市场新闻刷屏或客户追问事件影响时",
 };
 const talkTip = {
   基金: "重点带客户看清投资方向与波动特征，不与历史业绩挂钩",
@@ -41,6 +47,9 @@ const talkTip = {
   保险: "聚焦缺口梳理与责任顺序，不替客户决定具体产品",
   信贷: "结合客户实际现金流做一次压力测试，避免只看月供",
   养老: "强调长期规划与弹性，避免与具体收益率挂钩",
+  黄金: "讲清产品形式、价差费用和波动风险，不判断金价走势或提供买卖点",
+  代发: "引导客户核对正式规则并保护账户与收入信息，不承诺专属权益或审批结果",
+  热点运营: "把热点拆成政策来源、适用范围和客户自身匹配度，不做行情判断",
 };
 
 function seedDownloads(id) {
@@ -85,6 +94,25 @@ function readSeedLines(prefix) {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.startsWith(`${prefix}(`));
+}
+
+let categories = readSeedLines("category").map((line) => {
+  const body = line.replace(/^category\(/, "").replace(/\),?$/, "");
+  const [name, coverageContent] = splitArgs(body).map(valueOf);
+  return { name, coverageContent };
+});
+
+if (categories.length === 0) {
+  categories = [
+    { name: "基金", coverageContent: "基金类型 · 风险认知 · 交易规则" },
+    { name: "理财", coverageContent: "风险测评 · 风险等级 · 购买自检" },
+    { name: "信贷", coverageContent: "借贷决策 · 还款能力 · 用途边界" },
+    { name: "保险", coverageContent: "保障缺口 · 家庭顺序 · 产品差异" },
+    { name: "养老", coverageContent: "支出估算 · 医疗弹性 · 代际平衡" },
+    { name: "黄金", coverageContent: "实物黄金 · 积存金 · 价格波动" },
+    { name: "代发", coverageContent: "工资账户 · 薪资规划 · 权益保护" },
+    { name: "跨品类", coverageContent: "波动复盘 · 权益保护 · 资金规则" },
+  ];
 }
 
 let assets = readSeedLines("asset").map((line) => {
@@ -238,6 +266,13 @@ async function standardZip(entries) {
   }
 }
 
+function coverPathFor(asset) {
+  const cover = asset?.cover ?? "";
+  const match = /^\/api\/v1\/storage\/covers\/(.+)$/i.exec(cover);
+  if (match) return path.join(coverDir, path.basename(decodeURIComponent(match[1])));
+  return path.join(coverDir, `${asset.id}.png`);
+}
+
 async function assetPackage(asset) {
   const entries = [
     {
@@ -262,9 +297,9 @@ async function assetPackage(asset) {
       data: `${asset.risk}\n本资料仅用于投资者教育，不构成投资建议；投资有风险，决策需谨慎。`,
     },
   ];
-  const coverPath = path.join(coverDir, `${asset.id}.png`);
+  const coverPath = coverPathFor(asset);
   if (fssync.existsSync(coverPath)) {
-    entries.unshift({ name: `${asset.id}.png`, data: await fs.readFile(coverPath) });
+    entries.unshift({ name: `${asset.id}${path.extname(coverPath) || ".png"}`, data: await fs.readFile(coverPath) });
   }
   return standardZip(entries);
 }
@@ -298,9 +333,9 @@ async function topicPackage(topic) {
   ];
 
   for (const [index, asset] of topicAssets.entries()) {
-    const coverPath = path.join(coverDir, `${asset.id}.png`);
+    const coverPath = coverPathFor(asset);
     if (fssync.existsSync(coverPath)) {
-      entries.push({ name: `asset-${String(index + 1).padStart(2, "0")}-${asset.id}.png`, data: await fs.readFile(coverPath) });
+      entries.push({ name: `asset-${String(index + 1).padStart(2, "0")}-${asset.id}${path.extname(coverPath) || ".png"}`, data: await fs.readFile(coverPath) });
     }
   }
   return standardZip(entries);
@@ -333,6 +368,170 @@ function parseBody(req) {
   });
 }
 
+function readBuffer(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+async function parseMultipartFile(req) {
+  const contentType = req.headers["content-type"] ?? "";
+  const match = /boundary=([^;]+)/i.exec(contentType);
+  if (!match) throw new Error("Missing multipart boundary");
+  const boundary = Buffer.from(`--${match[1].replace(/^"|"$/g, "")}`);
+  const body = await readBuffer(req);
+  let start = body.indexOf(boundary);
+  while (start >= 0) {
+    start += boundary.length;
+    if (body[start] === 45 && body[start + 1] === 45) break;
+    if (body[start] === 13 && body[start + 1] === 10) start += 2;
+    const headerEnd = body.indexOf(Buffer.from("\r\n\r\n"), start);
+    if (headerEnd < 0) break;
+    const headers = body.slice(start, headerEnd).toString("utf8");
+    const dataStart = headerEnd + 4;
+    const next = body.indexOf(Buffer.from(`\r\n--${match[1].replace(/^"|"$/g, "")}`), dataStart);
+    if (next < 0) break;
+    const filename = /filename="([^"]*)"/i.exec(headers)?.[1] ?? "";
+    if (filename) return { filename, data: body.slice(dataStart, next) };
+    start = body.indexOf(boundary, next);
+  }
+  throw new Error("No file field in multipart body");
+}
+
+function jsonOnly(text) {
+  const trimmed = String(text ?? "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  return start >= 0 && end > start ? trimmed.slice(start, end + 1) : trimmed;
+}
+
+async function callDeepSeek(prompt) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured");
+  const baseUrl = (process.env.DEEPSEEK_BASE_URL ?? "https://api.deepseek.com").replace(/\/+$/, "");
+  const model = process.env.DEEPSEEK_MODEL ?? "deepseek-v4-pro";
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.3,
+        thinking: { type: "disabled" },
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "你只输出可解析 JSON。内容用于银行金融投教后台，必须合规、克制、无收益承诺。" },
+          { role: "user", content: prompt },
+        ],
+      }),
+    });
+    if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+    const payload = await response.json();
+    return JSON.parse(jsonOnly(payload?.choices?.[0]?.message?.content));
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeScene(value, fallback = "客户咨询") {
+  return ["客户咨询", "主题宣传", "风险教育", "节日活动"].includes(value) ? value : fallback;
+}
+
+function normalizeSceneGroup(value, fallback = "小白入门") {
+  return ["小白入门", "进阶理解", "高层管理"].includes(value) ? value : fallback;
+}
+
+function assetFallback(body) {
+  const cat = body.cat || "素材";
+  const rawName = (body.fileName || body.title || "").replace(/\.[^.]+$/, "");
+  const readableName = rawName.replace(/[_-]+/g, " ").trim();
+  const title = body.title || (readableName ? readableName.slice(0, 34) : `${cat}投教素材`);
+  return {
+    title,
+    question: body.question || `客户想了解${title}的重点和风险边界`,
+    summary: body.summary || `用一张长图帮助客户理解${cat}相关概念、适用场景和注意事项。`,
+    audience: body.audience || audience[cat] || "有相关咨询需求的客户",
+    useWhen: body.useWhen || useWhen[cat] || "客户提出相关问题或需要投教解释时",
+    talkTip: body.talkTip || talkTip[cat] || "先解释规则和风险边界，再引导客户结合自身情况判断。",
+    risk: body.risk || "本资料仅用于投资者教育，不构成投资建议；不承诺收益，不替代客户自主决策。",
+    scene: normalizeScene(body.scene),
+  };
+}
+
+function topicFallback(body) {
+  const selected = Array.isArray(body.assets) ? body.assets : [];
+  const channel = body.channel || selected[0]?.cat || "跨品类";
+  const names = selected.map((asset) => asset.title).filter(Boolean);
+  const name = body.name || `${channel}专题：${names[0] ? names[0].replace(/[？?。].*$/, "") : "客户常见问题"}`;
+  return {
+    name,
+    tagline: body.tagline || `围绕${channel}客户高频问题，按认知、规则和风险顺序讲清楚。`,
+    audience: body.audience || audience[channel] || "有相关咨询需求的客户",
+    goal: body.goal || `帮助客户系统理解${channel}相关内容，形成清晰的问题框架和风险边界。`,
+    combineReason: body.combineReason || `所选素材覆盖${names.slice(0, 4).join("、") || "客户常见问题"}，适合组合成连续讲解包。`,
+    sendMode: selected.length > 3 ? "分次发送" : "一次发送",
+    sendOrder: body.sendOrder || selected.map((asset) => asset.id).join("→") || "先基础认知，再规则说明，最后风险提示",
+    talkBoundary: body.talkBoundary || "不承诺收益或审批结果，不提供买卖点，不替客户做最终决策；具体规则以正式文件为准。",
+    scene: normalizeScene(body.scene),
+    sceneGroup: normalizeSceneGroup(body.sceneGroup),
+  };
+}
+
+async function suggestAssetDescription(body) {
+  const prompt = [
+    "你是银行金融投教内容运营助手。请根据管理员已填写信息，为素材生成客户经理可直接使用的说明文字。",
+    "要求：中文、合规、克制、不承诺收益、不提供买卖点。只返回 JSON。",
+    "JSON 字段：title, question, summary, audience, useWhen, talkTip, risk, scene。",
+    `品类：${body.cat || ""}`,
+    `使用场景：${body.scene || ""}`,
+    `文件名：${body.fileName || ""}`,
+    `标题：${body.title || ""}`,
+    `客户问题：${body.question || ""}`,
+    `核心摘要：${body.summary || ""}`,
+  ].join("\n");
+  try {
+    const suggestion = { ...assetFallback(body), ...(await callDeepSeek(prompt)) };
+    return { ...suggestion, scene: normalizeScene(suggestion.scene, body.scene || "客户咨询") };
+  } catch {
+    return assetFallback(body);
+  }
+}
+
+async function suggestTopicDescription(body) {
+  const selected = Array.isArray(body.assets) ? body.assets : [];
+  const prompt = [
+    "你是银行金融投教专题包运营助手。请根据已选择素材，为专题包生成客户经理可直接使用的说明文字。",
+    "要求：中文、合规、克制、不承诺收益、不替客户决策。只返回 JSON。",
+    "JSON 字段：name, tagline, audience, goal, combineReason, sendMode, sendOrder, talkBoundary, scene, sceneGroup。",
+    `品类：${body.channel || ""}`,
+    `专题名称：${body.name || ""}`,
+    `使用场景：${body.scene || ""}`,
+    `分层分类：${body.sceneGroup || ""}`,
+    "已选素材：",
+    ...selected.map((asset) => `- ${asset.id}｜${asset.cat}｜${asset.title}｜${asset.question || ""}｜${asset.summary || ""}`),
+  ].join("\n");
+  try {
+    const suggestion = { ...topicFallback(body), ...(await callDeepSeek(prompt)) };
+    return {
+      ...suggestion,
+      sendMode: suggestion.sendMode === "分次发送" ? "分次发送" : "一次发送",
+      scene: normalizeScene(suggestion.scene, body.scene || "客户咨询"),
+      sceneGroup: normalizeSceneGroup(suggestion.sceneGroup, body.sceneGroup || "小白入门"),
+    };
+  } catch {
+    return topicFallback(body);
+  }
+}
+
 function filterAsset(asset, url) {
   const keyword = url.searchParams.get("keyword");
   const cat = url.searchParams.get("cat");
@@ -349,6 +548,13 @@ function filterTopic(topic, url) {
   return (!keyword || [topic.name, topic.tagline, topic.goal].some((value) => value?.includes(keyword)))
     && (!channel || topic.channel === channel)
     && (!scene || topic.scene === scene);
+}
+
+function cleanCategory(body, fallbackName = "") {
+  return {
+    name: String(body.name ?? fallbackName).trim(),
+    coverageContent: String(body.coverageContent ?? "").trim(),
+  };
 }
 
 async function serveFile(res, filePath) {
@@ -392,6 +598,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (url.pathname === "/api/v1/categories" && req.method === "GET") return sendJson(res, categories);
     if (url.pathname === "/api/v1/assets" && req.method === "GET") return sendJson(res, assets.filter((asset) => filterAsset(asset, url)));
     if (url.pathname === "/api/v1/topics" && req.method === "GET") return sendJson(res, topics.filter((topic) => filterTopic(topic, url)));
     if (url.pathname === "/api/v1/search" && req.method === "GET") {
@@ -443,6 +650,21 @@ const server = http.createServer(async (req, res) => {
       return serveFile(res, path.join(coverDir, decodeURIComponent(match[1])));
     }
 
+    if (url.pathname === "/api/v1/admin/files/covers" && req.method === "POST") {
+      const file = await parseMultipartFile(req);
+      await fs.mkdir(coverDir, { recursive: true });
+      const ext = /\.(jpe?g)$/i.test(file.filename) ? ".jpg" : ".png";
+      const filename = `custom-${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`;
+      await fs.writeFile(path.join(coverDir, filename), file.data);
+      return sendJson(res, { publicUrl: `/api/v1/storage/covers/${filename}` }, 201);
+    }
+    if (url.pathname === "/api/v1/admin/ai/assets/description" && req.method === "POST") {
+      return sendJson(res, await suggestAssetDescription(await parseBody(req)));
+    }
+    if (url.pathname === "/api/v1/admin/ai/topics/description" && req.method === "POST") {
+      return sendJson(res, await suggestTopicDescription(await parseBody(req)));
+    }
+
     if (url.pathname === "/api/v1/admin/assets" && req.method === "POST") {
       const body = await parseBody(req);
       const id = body.id || `AST-${String(assets.length + 1).padStart(3, "0")}`;
@@ -480,6 +702,35 @@ const server = http.createServer(async (req, res) => {
     if ((match = url.pathname.match(/^\/api\/v1\/admin\/topics\/([^/]+)$/)) && req.method === "DELETE") {
       const id = decodeURIComponent(match[1]);
       topics = topics.filter((topic) => topic.id !== id);
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (url.pathname === "/api/v1/admin/categories" && req.method === "POST") {
+      const body = cleanCategory(await parseBody(req));
+      if (!body.name || !body.coverageContent) return sendJson(res, { message: "品类名称和覆盖内容不能为空" }, 400);
+      categories = [...categories.filter((category) => category.name !== body.name), body];
+      return sendJson(res, body, 201);
+    }
+    if ((match = url.pathname.match(/^\/api\/v1\/admin\/categories\/([^/]+)$/)) && req.method === "PUT") {
+      const oldName = decodeURIComponent(match[1]);
+      const existing = categories.find((category) => category.name === oldName);
+      if (!existing) return notFound(res);
+      const body = cleanCategory(await parseBody(req), oldName);
+      if (!body.name || !body.coverageContent) return sendJson(res, { message: "品类名称和覆盖内容不能为空" }, 400);
+      if (body.name !== oldName && categories.some((category) => category.name === body.name)) {
+        return sendJson(res, { message: `品类已存在: ${body.name}` }, 400);
+      }
+      categories = categories.map((category) => (category.name === oldName ? body : category));
+      if (body.name !== oldName) {
+        assets = assets.map((asset) => (asset.cat === oldName ? { ...asset, cat: body.name } : asset));
+        topics = topics.map((topic) => (topic.channel === oldName ? { ...topic, channel: body.name } : topic));
+      }
+      return sendJson(res, body);
+    }
+    if ((match = url.pathname.match(/^\/api\/v1\/admin\/categories\/([^/]+)$/)) && req.method === "DELETE") {
+      const name = decodeURIComponent(match[1]);
+      categories = categories.filter((category) => category.name !== name);
       res.writeHead(204);
       res.end();
       return;
